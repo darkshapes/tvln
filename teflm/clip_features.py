@@ -50,8 +50,6 @@ def get_model_and_pretrained(member: ModelType) -> tuple[str, str]:
 class CLIPFeatures:
     """Convenience wrapper around the Open‑CLIP model for image feature extraction."""
 
-    device_names = ("cpu", "cuda", "mps")
-
     def __init__(self) -> None:
         """Create a CLIPFeatures instance with the default model configuration (VIT_L_14_LAION2B_S32B_B82K @ FP32)."""
         model_name, dataset_name = get_model_and_pretrained(ModelType.VIT_L_14_LAION2B_S32B_B82K)
