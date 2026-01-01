@@ -10,8 +10,7 @@ readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = [
-    "nnll",
-    "pdoc>=16.0.0",
+    "open-clip-torch>=3.2.0",
 ]
 
 [dependency-groups]
@@ -20,9 +19,13 @@ dev = [
     "pytest>=9.0.2",
     "ruff>=0.14.10",
 ]
+
+[project.scripts]
+teflm = "teflm.main:main"
+
 [tool.setuptools.packages.find]
 where   = ["."]
-include = ["gravity*"]
+include = ["teflm*"]
 exclude = ["tests*"]
 
 [tool.setuptools_scm]
