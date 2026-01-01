@@ -1,0 +1,32 @@
+[build-system]
+requires      = ["setuptools", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teflm"
+dynamic = ["version"]
+description = "Unofficial implementation of arxiv 2302.4222"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.11"
+dependencies = [
+    "nnll",
+    "pdoc>=16.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.407",
+    "pytest>=9.0.2",
+    "ruff>=0.14.10",
+]
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["gravity*"]
+exclude = ["tests*"]
+
+[tool.setuptools_scm]
+write_to = "_version.py"
+
+[tool.uv.sources]
+nnll = { git = "https://github.com/darkshapes/nnll" }
