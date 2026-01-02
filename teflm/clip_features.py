@@ -2,10 +2,12 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 from enum import Enum
-from typing import Literal
 
 from open_clip import list_pretrained
-from torch import Tensor
+from open_clip.pretrained import _PRETRAINED
+from torch import Tensor, nn
+
+from teflm.gather import Gather
 
 
 class DeviceName(str, Enum):
@@ -38,33 +40,106 @@ ModelType = Enum(
 )
 
 
-def get_model_and_pretrained(member: ModelType) -> tuple[str, str]:
-    """Return the raw strings for a member.\n
+ModelLink = Enum(
+    "ModelData",
+    {
+        f"{family.replace('-', '_').upper()}_{id.replace('-', '_').upper()}": (data.get("hf_hub"), data.get("url"))
+        for family, name in _PRETRAINED.items()
+        for id, data in name.items()
+        if data.get("hf_hub") or data.get("url")
+    },
+)
 
+
+def get_model_and_pretrained(member: ModelType | ModelLink) -> tuple[str, str]:
+    """Return the raw strings for a member.\n
     :param member: Enum member representing a model and its pretrained variant.
     :returns: The model type and pretrained string."""
+    if isinstance(member, ModelLink):
+        return member.value[0], member.value[1]
+    elif isinstance(member, ModelType):
+        return member.value
 
-    return member.value
+
+class CLIPEncoder(nn.Module):
+    """CLIP wrapper courtesy ncclab-sustech/BrainFLORA"""
+
+    def __init__(self, device: str = "cpu", model: str = "openai/clip-vit-large-patch14"):
+        """Instantiate the encoder with a specific device and model\n
+        :param device: The graphics device to allocate, Default is cpu"""
+        from transformers import CLIPVisionModel
+        from torchvision.transforms import InterpolationMode, Compose, Resize, CenterCrop, Normalize
+
+        super().__init__()
+        self.clip = CLIPVisionModel.from_pretrained(model).to(device)
+        self.clip_size = (224, 224)
+        self.preprocess = Compose(
+            [
+                Resize(size=self.clip_size[0], interpolation=InterpolationMode.BICUBIC),
+                CenterCrop(size=self.clip_size),
+                Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711)),
+            ]
+        )
+        self._device = device
+
+    def clip_encode_image(self, x: Tensor):
+        """Encode image patches using CLIP vision model\n
+        Include class and positional embedding, then stop at second-to-last layer where features are strongest\n
+        :param x: Tensors of the image being processed"""
+
+        import torch
+
+        x = x.reshape(x.shape[0], x.shape[1], -1)  # [batchsize, 1024, 256]
+        x = x.permute(0, 2, 1)
+
+        class_embedding = self.clip.vision_model.embeddings.class_embedding.to(x.dtype)
+        class_embedding = class_embedding.repeat(x.shape[0], 1, 1)  # [batchsize, 1, 1024]
+        x = torch.cat([class_embedding, x], dim=1)
+
+        pos_embedding = self.clip.vision_model.embeddings.position_embedding
+        position_ids = torch.arange(0, 257).unsqueeze(0).to(self._device)
+        x = x + pos_embedding(position_ids)
+
+        x = self.clip.vision_model.pre_layrnorm(x)
+        x = self.clip.vision_model.encoder(x, output_hidden_states=True)
+
+        select_hidden_state_layer = -2
+        select_hidden_state = x.hidden_states[select_hidden_state_layer]  # [1, 256, 1024]
+        image_features = select_hidden_state[:, 1:]  # Remove class token
+
+        return image_features
+
+    def encode_image(self, x: Tensor):
+        """Full image encoding pipeline
+        :param x: the input image tensor in shape [B, C, H, W] and device-compatible dtype."""
+        x = x.to(self._device)
+        x = self.preprocess(x)  # [3, 224, 224]
+        x = self.clip.vision_model.embeddings.patch_embedding(x)  # [1024, 16, 16]
+        image_feats = self.clip_encode_image(x)
+        return image_feats
 
 
 class CLIPFeatures:
-    """Convenience wrapper around the Open‑CLIP model for image feature extraction."""
+    """Convenience wrapper around the Open-CLIP model for image feature extraction."""
 
     def __init__(self) -> None:
         """Create a CLIPFeatures instance with the default model configuration (VIT_L_14_LAION2B_S32B_B82K @ FP32)."""
-        model_name, dataset_name = get_model_and_pretrained(ModelType.VIT_L_14_LAION2B_S32B_B82K)
+        self._images = []
+        model_name, dataset_name = get_model_and_pretrained(ModelType.VIT_L_14_LAION2B_S32B_B82K)  # type:ignore
         self._model_type: str = model_name
         self._pretrained: str = dataset_name
         self._precision: str = "fp32"
 
-    def ImageEncoder(self, images) -> Tensor:
+    def ImageEncoder(self) -> Tensor:
         """Encode a batch of images into CLIP features.\n
         :param images: Paths to the image files.
         :returns Concatenated image feature vectors."""
 
         from open_clip import create_model_and_transforms
         from PIL import Image
-        from torch import cat as torch_cat, no_grad as torch_no_grad, stack as torch_stack
+        from torch import cat as torch_cat
+        from torch import no_grad as torch_no_grad
+        from torch import stack as torch_stack
 
         vlmodel, preprocess_train, feature_extractor = create_model_and_transforms(
             self._model_type,
@@ -76,9 +151,9 @@ class CLIPFeatures:
         batch_size = 512
         image_features_list = []
 
-        for i in range(0, len(self.images), batch_size):
-            batch_images = self.images[i : i + batch_size]
-            image_inputs = torch_stack([preprocess_train(Image.open(img).convert("RGB")) for img in batch_images])
+        for i in range(0, len(self._images), batch_size):
+            batch_images = self._images[i : i + batch_size]
+            image_inputs = torch_stack([preprocess_train(Image.open(img).convert("RGB")) for img in batch_images])  # type:ignore
 
             with torch_no_grad():
                 batch_image_features = vlmodel.encode_image(image_inputs)
@@ -87,35 +162,38 @@ class CLIPFeatures:
         image_features = torch_cat(image_features_list, dim=0)
         return image_features
 
-    def _set_images(self, image_paths: list[str] | str) -> None:
-        """Internal helper to normalise the ``images`` attribute.\n
-        :param image_paths: One or more image file paths."""
-
-        if isinstance(image_paths, list):
-            self.images: list[str] = image_paths
-        else:
-            self.images = [image_paths]
-
     def set_device(self, device_name: DeviceName) -> None:
         """Set the computation device.\n
         :param device_name : Target graphics processing device."""
         self._device: str = device_name.value
 
     def set_model_type(self, model_type: ModelType) -> None:
-        """Switch the underlying Open‑CLIP model.
+        """Switch the underlying Open-CLIP model.
         :param model_type: Desired pretrained model and dataset variant."""
         model_name, pretrained = get_model_and_pretrained(model_type)
         self._model_type = model_name
         self._pretrained = pretrained
+
+    def set_model_link(self, model_link: ModelLink) -> None:
+        """Switch the path to an Open-CLIP model
+        :param model_link: Desired pretrained model and dataset variant."""
+        model_link, model_hub = get_model_and_pretrained(model_link)
+        self._model_link = model_link
+        self._model_hub = model_hub
 
     def set_precision(self, precision: PrecisionType) -> None:
         """Change the numeric precision used by the model.
         :param precision: Desired float calculation precision."""
         self._precision = precision.value
 
-    def extract(self, image_paths) -> Tensor:
-        """Convenience entry‑point that sets images and returns CLIP features.\n
+    def extract(self, image: Gather, last_layer=False) -> Tensor:
+        """Convenience entry-point that sets images and returns CLIP features.\n
         :param image_paths: One or more image file paths.
         :returns: Extracted image features"""
-        self._set_images(image_paths)
-        return self.ImageEncoder(self.images)
+        if not last_layer:
+            clip_encoder = CLIPEncoder(self._device)
+
+            return clip_encoder.encode_image(image.tensor)
+        else:
+            self._images = [image._image_path]
+            return self.ImageEncoder()
