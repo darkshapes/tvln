@@ -4,23 +4,11 @@
 import torch
 
 
-def cleanup(model, device: str):
-    import torch
-    import gc
-
-    if device != "cpu":
-        gpu = getattr(torch, device)
-        gpu.empty_cache()
-    model = None
-    del model
-    gc.collect()
-
-
 @torch.no_grad
 def main():
     import os
-    from teflm.clip_features import CLIPFeatures, DeviceName, PrecisionType, ModelLink, ModelType
-    from teflm.gather import Gather
+    from tvln.clip_features import CLIPFeatures, DeviceName, PrecisionType, ModelLink, ModelType
+    from tvln.gather import ImageFile
     from huggingface_hub import snapshot_download
     from diffusers import AutoencoderKL
 
@@ -34,13 +22,13 @@ def main():
         device = DeviceName.MPS
         precision = PrecisionType.FP32
 
+    gather = ImageFile()
+    gather.single_image()
+    gather.as_tensor(dtype=torch.float32, device=text_device)
+
     feature_extractor = CLIPFeatures()
     feature_extractor.set_device(text_device)
     feature_extractor.set_precision(precision)
-
-    gather = Gather()
-    gather.single_image()
-    gather.as_tensor(dtype=torch.float32, device=text_device)
     feature_extractor.set_model_link(ModelLink.VIT_L_14_LAION2B_S32B_B82K)  # type: ignore
     clip_l_tensor = feature_extractor.extract(gather)
     clip_l_data = vars(feature_extractor)
