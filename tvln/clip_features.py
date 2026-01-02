@@ -3,52 +3,10 @@
 
 from enum import Enum
 
-from open_clip import list_pretrained
-from open_clip.pretrained import _PRETRAINED
 from torch import Tensor, nn
 
 from tvln.batch import ImageFile
-
-
-class DeviceName(str, Enum):
-    """Graphics processors usable by the CLIP pipeline."""
-
-    CPU = "cpu"
-    CUDA = "cuda"
-    MPS = "mps"
-
-
-class PrecisionType(str, Enum):
-    """Supported numeric float precision."""
-
-    FP64 = "fp64"
-    FP32 = "fp32"
-    BF16 = "bf16"
-    FP16 = "fp16"
-
-
-ModelType = Enum(
-    "ModelData",
-    {
-        # member name → (model_type, pretrained) value
-        f"{model.replace('-', '_').upper()}_{pretrained.replace('-', '_').upper()}": (
-            model,
-            pretrained,
-        )
-        for model, pretrained in list_pretrained()
-    },
-)
-
-
-ModelLink = Enum(
-    "ModelData",
-    {
-        f"{family.replace('-', '_').upper()}_{id.replace('-', '_').upper()}": (data.get("hf_hub", "").strip("/"), data.get("url"))
-        for family, name in _PRETRAINED.items()
-        for id, data in name.items()
-        if data.get("hf_hub") or data.get("url")
-    },
-)
+from tvln.options import PrecisionType, ModelType, DeviceName
 
 
 def get_model_and_pretrained(member: Enum) -> tuple[str, str]:
@@ -59,7 +17,9 @@ def get_model_and_pretrained(member: Enum) -> tuple[str, str]:
 
 
 class CLIPEncoder(nn.Module):
-    """CLIP wrapper courtesy ncclab-sustech/BrainFLORA"""
+    """CLIP wrapper\n\n
+    MIT licensed by ncclab-sustech/BrainFLORA
+    """
 
     def __init__(self, device: str = "cpu", model: str = "openai/clip-vit-large-patch14") -> None:
         """Instantiate the encoder with a specific device and model\n

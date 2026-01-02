@@ -1,20 +1,28 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-import torch
 from pathlib import Path
+
+import torch
 
 
 class ImageFile:
     _image_path: str
 
     def __init__(self) -> None:
+        """Initializes an ImageFile instance with a default"""
         self._default_path = Path(__file__).resolve().parent / "assets" / "DSC_0047.png"
         self._default_path.resolve()
         self._default_path.as_posix()
 
     def single_image(self) -> None:
-        image_path = input("Enter the path to an image file (e.g. /home/user/image.png, C:/Users/user/Pictures/...): ")
+        """Set absolute path to an image file, ensuring the file exists, falling back to a default image if none is provided."""
+        from sys import modules as sys_modules
+
+        if "pytest" not in sys_modules:
+            image_path = input("Enter the path to an image file (e.g. /home/user/image.png, C:/Users/user/Pictures/...): ")
+        else:
+            image_path = None
         if not image_path:
             image_path = self._default_path
         if not Path(image_path).resolve().is_file():
@@ -25,15 +33,15 @@ class ImageFile:
         if not isinstance(self._image_path, str):
             raise TypeError(f"Expected a string or list of strings for `image_paths` {self._image_path}, got {type(self._image_path)} ")
 
-    def as_tensor(self, dtype: torch.dtype, device: torch.device, normalize: bool = False) -> None:
+    def as_tensor(self, dtype: torch.dtype, device: str, normalize: bool = False) -> None:
         """Convert a Pillow `Image` to a batched `torch.Tensor`\n
         :param image: Pillow image (RGB) to encode.
         :param device: Target device for the tensor (default: ``gpu.device``).
         :param normalize:  Normalize tensor to [-1, 1]:
         :return: Tensor of shape ``[1, 3, H, W]`` on ``device``."""
 
-        from numpy._typing import NDArray
         from numpy import array as np_array
+        from numpy._typing import NDArray
         from PIL.Image import open as open_img
 
         with open_img(str(self._image_path)).convert("RGB") as pil_image:
@@ -43,3 +51,7 @@ class ImageFile:
             if normalize:
                 tensor = tensor * 2.0 - 1.0
             self.tensor = tensor
+
+    @property
+    def image_path(self) -> str:
+        return self._image_path
