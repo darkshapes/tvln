@@ -5,7 +5,7 @@ import torch
 from pathlib import Path
 
 
-class Gather:
+class ImageFile:
     _image_path: str
 
     def __init__(self) -> None:

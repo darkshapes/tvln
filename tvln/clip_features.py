@@ -7,7 +7,7 @@ from open_clip import list_pretrained
 from open_clip.pretrained import _PRETRAINED
 from torch import Tensor, nn
 
-from teflm.gather import Gather
+from tvln.batch import ImageFile
 
 
 class DeviceName(str, Enum):
@@ -61,11 +61,11 @@ def get_model_and_pretrained(member: Enum) -> tuple[str, str]:
 class CLIPEncoder(nn.Module):
     """CLIP wrapper courtesy ncclab-sustech/BrainFLORA"""
 
-    def __init__(self, device: str = "cpu", model: str = "openai/clip-vit-large-patch14"):
+    def __init__(self, device: str = "cpu", model: str = "openai/clip-vit-large-patch14") -> None:
         """Instantiate the encoder with a specific device and model\n
         :param device: The graphics device to allocate, Default is cpu"""
+        from torchvision.transforms import CenterCrop, Compose, InterpolationMode, Normalize, Resize
         from transformers import CLIPVisionModel
-        from torchvision.transforms import InterpolationMode, Compose, Resize, CenterCrop, Normalize
 
         super().__init__()
         self.clip = CLIPVisionModel.from_pretrained(model).to(device)
@@ -79,7 +79,7 @@ class CLIPEncoder(nn.Module):
         )
         self._device = device
 
-    def clip_encode_image(self, x: Tensor):
+    def clip_encode_image(self, x: Tensor) -> Tensor:
         """Encode image patches using CLIP vision model\n
         Include class and positional embedding, then stop at second-to-last layer where features are strongest\n
         :param x: Tensors of the image being processed"""
@@ -106,7 +106,7 @@ class CLIPEncoder(nn.Module):
 
         return image_features
 
-    def encode_image(self, x: Tensor):
+    def encode_image(self, x: Tensor) -> Tensor:
         """Full image encoding pipeline
         :param x: the input image tensor in shape [B, C, H, W] and device-compatible dtype."""
         x = x.to(self._device)
@@ -183,7 +183,7 @@ class CLIPFeatures:
         :param precision: Desired float calculation precision."""
         self._precision = precision.value
 
-    def extract(self, image: Gather, last_layer=False) -> Tensor:
+    def extract(self, image: ImageFile, last_layer=False) -> Tensor:
         """Convenience entry-point that sets images and returns CLIP features.\n
         :param image_paths: One or more image file paths.
         :returns: Extracted image features"""
