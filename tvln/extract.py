@@ -3,9 +3,12 @@
 
 from enum import Enum
 
+import torch
 from tvln.batch import ImageFile
 from tvln.clip_features import CLIPFeatures
 from tvln.options import DeviceName, ModelLink, ModelType, PrecisionType
+from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
+from huggingface_hub import snapshot_download
 
 
 class FeatureExtractor:
@@ -22,12 +25,9 @@ class FeatureExtractor:
         if isinstance(model_info, str):
             import os
 
-            from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
-            from huggingface_hub import snapshot_download
-
             vae_path = snapshot_download(model_info, allow_patterns=["vae/*"])
             vae_path = os.path.join(vae_path, "vae")
-            vae_model = AutoencoderKL.from_pretrained(vae_path, torch_dtype=self.precision.value).to(self.device.value)
+            vae_model = AutoencoderKL.from_pretrained(vae_path, torch_dtype=self.precision).to(self.device.value)
             vae_tensor = vae_model.tiled_encode(self.image_file.tensor, return_dict=False)
             return vae_tensor, model_info
         clip_extractor = CLIPFeatures()
@@ -60,3 +60,9 @@ class FeatureExtractor:
 
     def set_device(self, device: DeviceName):
         self.device = device
+
+    def set_precision(self, precision: PrecisionType | torch.dtype):
+        if isinstance(precision, PrecisionType):
+            self.precision = precision.value
+        else:
+            self.precision = precision

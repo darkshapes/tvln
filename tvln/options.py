@@ -22,6 +22,10 @@ class PrecisionType(str, Enum):
     FP32 = "fp32"
     BF16 = "bf16"
     FP16 = "fp16"
+    FLOAT16 = "torch.float16"
+    BFLOAT16 = "torch.bfloat16"
+    FLOAT32 = "torch.float32"
+    FLOAT64 = "torch.float64"
 
 
 ModelType = Enum(

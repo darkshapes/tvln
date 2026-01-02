@@ -6,10 +6,6 @@ import torch
 
 @torch.no_grad
 def main():
-    import os
-
-    from huggingface_hub import snapshot_download
-
     from tvln.batch import ImageFile
     from tvln.options import DeviceName, ModelLink, ModelType, PrecisionType
     from tvln.extract import FeatureExtractor
@@ -37,8 +33,8 @@ def main():
     clip_g_tensor, clip_g_data = feature_extractor.extract_features(ModelLink.VIT_BIGG_14_LAION2B_S39B_B160K)
 
     image_file.as_tensor(dtype=dtype, device=device)
-    print(dtype)
     feature_extractor.set_device(device)
+    feature_extractor.set_precision(torch.float32)
     vae_tensor, vae_data = feature_extractor.extract_features("black-forest-labs/FLUX.1-dev")
 
     aggregate_data = {
